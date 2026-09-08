@@ -20,6 +20,7 @@ find_package(jaka_msgs REQUIRED)
 find_package(moveit_msgs REQUIRED)
 find_package(action_msgs REQUIRED)
 find_package(control_msgs REQUIRED)
+find_package(trajectory_msgs REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(moveit_visual_tools REQUIRED)
 find_package(moveit_core REQUIRED)
@@ -31,6 +32,9 @@ find_package(moveit_core REQUIRED)
 # Declare executable targets
 add_executable(moveit_server src/moveit_server.cpp)
 add_executable(moveit_test src/moveit_test.cpp)
+add_executable(s5_auto_cycle src/s5_auto_cycle.cpp)
+add_library(trajectory_selector src/trajectory_selector.cpp)
+add_library(servo_stream src/servo_stream.cpp)
 
 # Link libraries
 ament_target_dependencies(moveit_server
@@ -42,6 +46,7 @@ ament_target_dependencies(moveit_server
   moveit_msgs
   action_msgs
   control_msgs
+  trajectory_msgs
   moveit_ros_planning_interface
 )
 ament_target_dependencies(moveit_test
@@ -56,6 +61,18 @@ ament_target_dependencies(moveit_test
   moveit_visual_tools
   moveit_core
 )
+ament_target_dependencies(trajectory_selector
+  rclcpp
+  moveit_ros_planning_interface
+  moveit_core
+)
+ament_target_dependencies(servo_stream trajectory_msgs)
+ament_target_dependencies(s5_auto_cycle
+  rclcpp
+  std_msgs
+  moveit_ros_planning_interface
+  moveit_core
+)
 
 # include_directories(
 #   include
@@ -67,11 +84,14 @@ ament_target_dependencies(moveit_test
 # )
 
 target_link_libraries(moveit_test
+  trajectory_selector
   ${moveit_msgs_LIBRARIES}
   ${moveit_ros_planning_interface_LIBRARIES}
   ${moveit_core_LIBRARIES}
   ${moveit_visual_tools_LIBRARIES}
 )
+target_link_libraries(s5_auto_cycle trajectory_selector)
+target_link_libraries(moveit_server servo_stream)
 
 # For including directories in ROS 2
 target_include_directories(moveit_server
@@ -88,6 +108,15 @@ target_include_directories(moveit_test
     ${moveit_ros_planning_interface_INCLUDE_DIRS}
     ${moveit_visual_tools_INCLUDE_DIRS}
 )
+target_include_directories(trajectory_selector PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+target_include_directories(servo_stream PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+target_include_directories(s5_auto_cycle PRIVATE include)
 
 # Specify where to find external libraries
 set(LIBRARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib)
@@ -103,13 +132,29 @@ target_link_libraries(moveit_test ${LIBRARY_DIR}/libjakaAPI.so)
 install(TARGETS
   moveit_server
   moveit_test
+  s5_auto_cycle
   DESTINATION lib/${PROJECT_NAME}
 )
+install(TARGETS trajectory_selector servo_stream
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+)
+install(DIRECTORY include/ DESTINATION include)
 
 # Install launch files
 install(DIRECTORY launch/
   DESTINATION share/${PROJECT_NAME}/launch
 )
+
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(trajectory_selector_test test/trajectory_selector_test.cpp)
+  target_link_libraries(trajectory_selector_test trajectory_selector)
+  ament_target_dependencies(trajectory_selector_test moveit_ros_planning_interface moveit_core)
+  ament_add_gtest(servo_stream_test test/servo_stream_test.cpp)
+  target_link_libraries(servo_stream_test servo_stream)
+  ament_target_dependencies(servo_stream_test trajectory_msgs)
+endif()
 
 ament_package()
 
